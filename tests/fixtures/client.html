@@ -47,7 +47,7 @@ window.__ModuleLoader__ = {
     check("exports.apply 是函数", typeof exports.apply === "function");
     check("exports.inject 只依赖 theme 服务", JSON.stringify(exports.inject) === '["theme"]', JSON.stringify(exports.inject));
     check("PALETTE 导出 107 个令牌", Object.keys(exports.PALETTE).length === 107, String(Object.keys(exports.PALETTE).length));
-    check("DEFAULT_OPTIONS 导出 16 个选项", Object.keys(exports.DEFAULT_OPTIONS).length === 16, Object.keys(exports.DEFAULT_OPTIONS).join(","));
+    check("DEFAULT_OPTIONS 导出 17 个选项", Object.keys(exports.DEFAULT_OPTIONS).length === 17, Object.keys(exports.DEFAULT_OPTIONS).join(","));
 
     // ---- 假的 Cordis 上下文：记录 effect 与令牌层调用，能真正回收 ----
     const makeCtx = (remote) => {
@@ -401,37 +401,8 @@ window.__ModuleLoader__ = {
     check("音乐操作按钮对辅助技术可见", [...layer.querySelectorAll('.eva-mp button,.eva-mp-name')].every(el => !el.closest('[aria-hidden="true"]')));
 
     // —— 时钟尺寸与分层信息栏 ——
-    check("时钟尺寸滑杆保留缩小范围（0.6–5，步进 0.05）", (() => {
-      const input = panel.querySelector('.eva-row[data-key="clockScale"] input[type="range"]');
-      return Boolean(input) && input.min === "0.6" && input.max === "5" && input.step === "0.05";
-    })(), (() => {
-      const input = panel.querySelector('.eva-row[data-key="clockScale"] input[type="range"]');
-      return input ? `${input.min}–${input.max} 步进 ${input.step}` : "(无滑杆)";
-    })());
-    check("改时钟尺寸会写进 --eva-clock-scale（面板缩小不动对齐位置）", (() => {
-      const input = panel.querySelector('.eva-row[data-key="clockScale"] input[type="range"]');
-      if (!input) return false;
-      input.value = "1.4";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      const applied = getComputedStyle(document.documentElement).getPropertyValue("--eva-clock-scale").trim();
-      const rule = [...document.styleSheets].flatMap((sh) => {
-        try { return [...sh.cssRules]; } catch { return []; }
-      }).find((r) => (r.selectorText || "").trim() === ".eva-clockpanel");
-      // transform-origin 的实际值是 "0px 0px"（带单位），不要写成 /^0 0/
-      const origin = rule ? (rule.style.transformOrigin || rule.style.webkitTransformOrigin || "") : "";
-      const scaled = Boolean(rule) && /--eva-clock-scale/.test(rule.style.transform || "") &&
-        /^0(px)?\s+0(px)?/.test(origin);
-      const ok = Number(applied) === 0.56 && scaled;
-      input.value = "1";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      return ok;
-    })(), (() => {
-      const v = getComputedStyle(document.documentElement).getPropertyValue("--eva-clock-scale").trim();
-      const rule = [...document.styleSheets].flatMap((sh) => {
-        try { return [...sh.cssRules]; } catch { return []; }
-      }).find((r) => (r.selectorText || "").trim() === ".eva-clockpanel");
-      return `变量=${v} transform=${rule ? rule.style.transform : "?"}`;
-    })());
+    // —— 时钟尺寸（改由四角缩放，不再有滑杆） ——
+    check("时钟尺寸滑杆已移除（四角缩放替代）", !panel.querySelector('.eva-row[data-key="clockScale"] input[type="range"]'));
     check("日期、时区与 UTC 在主时间下方独立成栏", (() => {
       const el = layer.querySelector(".eva-clockpanel");
       const digits = el.querySelector(".eva-cp-digits").getBoundingClientRect();
@@ -568,8 +539,8 @@ window.__ModuleLoader__ = {
       return bad ? "含:" + bad.join(",") : "未触碰尺寸属性";
     })());
 
-    check("面板含 11 个开关 + 4 个滑杆",
-      swCount === 11 && rangeCount === 4, `switch=${swCount} range=${rangeCount}`);
+    check("面板含 11 个开关 + 2 个滑杆",
+      swCount === 11 && rangeCount === 2, `switch=${swCount} range=${rangeCount}`);
     check("每个开关都带 data-key 与 role=switch",
       [...panel.querySelectorAll(".eva-sw")]
         .every((b) => b.dataset.key && b.getAttribute("role") === "switch"));
@@ -615,27 +586,59 @@ window.__ModuleLoader__ = {
       root.style.getPropertyValue("--eva-hud-scale").trim() === "1.5",
       root.style.getPropertyValue("--eva-hud-scale"));
     check("设置面板独立于仪表缩放", panel.parentElement === layer && getComputedStyle(panel).transform === "none");
-    const scaleRange = panel.querySelector('.eva-row[data-key="hudScale"] input[type="range"]');
-    check("面板有仪表尺寸滑杆（范围 0.6–5、步进 0.05）",
-      Boolean(scaleRange) && scaleRange.min === "0.6" && scaleRange.max === "5" && scaleRange.step === "0.05",
-      scaleRange && `${scaleRange.min}-${scaleRange.max}/${scaleRange.step}`);
-    check("时钟与仪表共享范围和步长", (() => {
-      const clockRange=panel.querySelector('[data-key="clockScale"] input');
-      return scaleRange.min===clockRange.min&&scaleRange.max===clockRange.max&&scaleRange.step===clockRange.step;
-    })());
-    check("放大空间覆盖旧范围（上限 5 > 2.3）", Number(scaleRange.max) > 2.3);
-    scaleRange.value = "1.35";
-    scaleRange.dispatchEvent(new Event("input", { bubbles: true }));
-    check("拖滑杆 → 改 --eva-hud-scale 并持久化",
-      root.style.getPropertyValue("--eva-hud-scale").trim() === "1.35" &&
-        (() => { try { return JSON.parse(localStorage.getItem(OPTIONS_KEY)).hudScale === 1.35; } catch { return false; } })(),
-      root.style.getPropertyValue("--eva-hud-scale"));
-    check("缩放用 transform 实现，且 origin 固定在右下角（放大不会漂）", (() => {
+    check("设置面板不再提供尺寸滑杆（改由四角缩放）",
+      !panel.querySelector('[data-key="hudScale"]') && !panel.querySelector('[data-key="clockScale"]'),
+      Boolean(panel.querySelector('[data-key="hudScale"]')));
+    check("缩放用 transform 实现", (() => {
       const all = [...document.styleSheets].flatMap((sh) => {
         try { return [...sh.cssRules].map((r) => r.cssText); } catch { return []; }
       }).join(" ");
-      return all.includes("--eva-hud-scale") && all.includes("transform-origin");
+      return all.includes("--eva-hud-scale") && all.includes("--eva-clock-scale");
     })());
+    const clockPanel = layer.querySelector(".eva-clockpanel");
+    const gripOf = (corner) => clockPanel.querySelector(`.eva-resize[data-corner="${corner}"]`);
+    const doResize = async (corner, dx, dy) => {
+      const grip = gripOf(corner);
+      const g = grip.getBoundingClientRect();
+      const pid = 201;
+      const fire = (type, tdx, tdy, target) => target.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: pid, isPrimary: true,
+        button: 0, buttons: type === "pointerup" ? 0 : 1,
+        clientX: g.left + g.width / 2 + tdx, clientY: g.top + g.height / 2 + tdy,
+      }));
+      fire("pointerdown", 0, 0, grip);
+      fire("pointermove", dx, dy, window);
+      fire("pointerup", dx, dy, window);
+      await new Promise((r) => setTimeout(r, 30));
+    };
+    check("四角缩放手柄已挂载（四个角）", ["tl", "tr", "bl", "br"].every((c) => Boolean(gripOf(c))));
+
+    const beforeBR = clockPanel.getBoundingClientRect();
+    await doResize("br", -40, -40);
+    const afterBR = clockPanel.getBoundingClientRect();
+    check("拖右下角缩小时钟（左上角保持）",
+      afterBR.width < beforeBR.width && Math.abs(afterBR.left - beforeBR.left) < 2 && Math.abs(afterBR.top - beforeBR.top) < 2,
+      JSON.stringify({ before: [beforeBR.width, beforeBR.left, beforeBR.top], after: [afterBR.width, afterBR.left, afterBR.top] }));
+    check("四角缩放写入 clockScale 并持久化", (() => {
+      try { return JSON.parse(localStorage.getItem(OPTIONS_KEY)).clockScale < 1.5; } catch { return false; }
+    })());
+    globalThis.__EVA_MAGI_THEME__.set("clockScale", 1.5);
+
+    const beforeTL = clockPanel.getBoundingClientRect();
+    await doResize("tl", -40, -40);
+    const afterTL = clockPanel.getBoundingClientRect();
+    check("拖左上角放大时钟（右下角保持）",
+      afterTL.width > beforeTL.width && Math.abs(afterTL.right - beforeTL.right) < 2 && Math.abs(afterTL.bottom - beforeTL.bottom) < 2,
+      JSON.stringify({ before: [beforeTL.width, beforeTL.right, beforeTL.bottom], after: [afterTL.width, afterTL.right, afterTL.bottom] }));
+    globalThis.__EVA_MAGI_THEME__.set("clockScale", 1.5);
+    check("mpScale 独立选项默认 1.5", globalThis.__EVA_MAGI_THEME__.options.mpScale === 1.5,
+      String(globalThis.__EVA_MAGI_THEME__.options.mpScale));
+    const mpScaleVar = () => root.style.getPropertyValue("--eva-mp-scale").trim();
+    const beforeMp = mpScaleVar();
+    globalThis.__EVA_MAGI_THEME__.set("clockScale", 1.8);
+    check("调时钟倍率不影响播放器倍率（缩放已解耦）", mpScaleVar() === beforeMp,
+      `${beforeMp} -> ${mpScaleVar()}`);
+    globalThis.__EVA_MAGI_THEME__.set("clockScale", 1.5);
     check("仪表基准宽度固定，并与时钟的新标尺一致", (() => {
       const st = layer.querySelector(".eva-corner-stack");
       const width = parseFloat(getComputedStyle(st).width);
@@ -722,11 +725,12 @@ window.__ModuleLoader__ = {
         !/\.eva-corner-stack\s*\{[^}]*align-items:\s*flex-end/.test(all);
     })());
     check("面板保持固定字号且有明确关闭入口", getComputedStyle(panel).fontSize === "12px" && Boolean(panel.querySelector('.eva-panel-close[aria-label="关闭显示设定"]')));
-    check("缩放不影响扫描线滑杆的置灰逻辑", (() => {
+    check("扫描线浓度滑杆随扫描线开关置灰", (() => {
       globalThis.__EVA_MAGI_THEME__.set("scanlines", false);
-      const dimmed = scaleRange.closest(".eva-row").dataset.dim;
+      const row = panel.querySelector('.eva-row[data-key="scanlineStrength"]');
+      const dimmed = row ? row.dataset.dim : undefined;
       globalThis.__EVA_MAGI_THEME__.set("scanlines", true);
-      return dimmed === undefined || dimmed === "0";
+      return dimmed === "1";
     })());
 
     check("Console 钩子与面板共用同一通道（__EVA_MAGI_THEME__.set 就是面板的 set）",
@@ -761,8 +765,9 @@ window.__ModuleLoader__ = {
     check("零缩放被收敛到合法下限", api.options.hudScale === 0.6 && !root.style.cssText.includes("Infinity"));
     api.set("hudScale", 1.5);
     let badNumber = false;
+    api.set("clockScale", 1.2);
     try { api.set("clockScale", Infinity); } catch { badNumber = true; }
-    check("无穷缩放被拒绝", badNumber && api.options.clockScale === 1);
+    check("无穷缩放被拒绝", badNumber && api.options.clockScale === 1.2);
     hudEl.click();
     check("打开设置把焦点交给面板", panel.contains(document.activeElement));
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -947,6 +952,112 @@ window.__ModuleLoader__ = {
         return /\.eva-tags\s*\{[^}]*transition:\s*transform/.test(all) && /data-face="back"/.test(all);
       })());
       for (const e of c9.state.effects) e.dispose();
+    }
+
+    {
+      try {
+        localStorage.removeItem("dsh-eva-magi-theme:layout");
+        localStorage.setItem("dsh-eva-magi-theme:options", JSON.stringify({ boot: false }));
+      } catch {}
+      const c10 = makeCtx();
+      exports.apply(c10);
+      await new Promise((r) => setTimeout(r, 80));
+      const latest = () => [...document.body.querySelectorAll(".eva-magi-layer")].at(-1);
+      const layer10 = latest();
+      const clock10 = layer10.querySelector(".eva-clockpanel");
+      const handle10 = layer10.querySelector(".eva-cp-top");
+      const before = clock10.getBoundingClientRect();
+      check("拖动测试：时钟可见", clock10.offsetWidth > 0 && !clock10.hidden, String(clock10.offsetWidth));
+      check("时钟面板可命中指针（pointer-events: auto）", getComputedStyle(clock10).pointerEvents === "auto", getComputedStyle(clock10).pointerEvents);
+      check("仪表可命中指针（pointer-events: auto）", getComputedStyle(layer10.querySelector(".eva-hud")).pointerEvents === "auto");
+      check("elementFromPoint 命中时钟面板", (() => {
+        const r = clock10.getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return Boolean(el) && (el === clock10 || clock10.contains(el));
+      })());
+      const pid = 91;
+      const fire = (type, dx, dy, target) => target.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: pid, isPrimary: true,
+        button: 0, buttons: type === "pointerup" ? 0 : 1,
+        clientX: before.left + 24 + dx, clientY: before.top + 14 + dy,
+      }));
+      fire("pointerdown", 0, 0, handle10);
+      fire("pointermove", -36, 28, window);
+      fire("pointerup", -36, 28, window);
+      await new Promise((r) => setTimeout(r, 30));
+      const after = clock10.getBoundingClientRect();
+      check("拖动时钟：位置跟随指针",
+        Math.abs(after.left - before.left + 36) < 2.5 && Math.abs(after.top - before.top - 28) < 2.5,
+        JSON.stringify({ before: [before.left, before.top], after: [after.left, after.top] }));
+      check("拖动后位置写入 localStorage", (() => {
+        try {
+          const saved = JSON.parse(localStorage.getItem("dsh-eva-magi-theme:layout"));
+          return saved && Number.isFinite(saved.clock.left) && Math.abs(saved.clock.left - after.left) < 1.5 &&
+            Number.isFinite(saved.clock.top) && Math.abs(saved.clock.top - after.top) < 1.5;
+        } catch { return false; }
+      })());
+      // 仪表：拖动竖标移动整个仪表簇，且拖动后的 click 不能误开设置面板
+      const stack10 = layer10.querySelector(".eva-corner-stack");
+      const hudHandle = layer10.querySelector(".eva-hud-vlabel");
+      const panel10 = layer10.querySelector(".eva-panel");
+      const stackBefore = stack10.getBoundingClientRect();
+      const hudFire = (type, dx, dy, target) => target.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId: 92, isPrimary: true,
+        button: 0, buttons: type === "pointerup" ? 0 : 1,
+        clientX: stackBefore.left + 12 + dx, clientY: stackBefore.bottom - 30 + dy,
+      }));
+      hudFire("pointerdown", 0, 0, hudHandle);
+      hudFire("pointermove", -28, -22, window);
+      hudFire("pointerup", -28, -22, window);
+      await new Promise((r) => setTimeout(r, 30));
+      const stackAfter = stack10.getBoundingClientRect();
+      check("拖动仪表：整簇位置跟随指针",
+        Math.abs(stackAfter.left - stackBefore.left + 28) < 2.5 && Math.abs(stackAfter.top - stackBefore.top + 22) < 2.5,
+        JSON.stringify({ before: [stackBefore.left, stackBefore.top], after: [stackAfter.left, stackAfter.top] }));
+      hudFire("pointerdown", 0, 0, hudHandle);
+      hudFire("pointermove", 5000, 5000, window);
+      hudFire("pointerup", 5000, 5000, window);
+      await new Promise((r) => setTimeout(r, 30));
+      const hudClamped = stack10.getBoundingClientRect();
+      check("拖出界面时仪表夹回可视区域",
+        hudClamped.right <= window.innerWidth - 3 && hudClamped.bottom <= window.innerHeight - 3,
+        JSON.stringify({ right: hudClamped.right, bottom: hudClamped.bottom, w: window.innerWidth, h: window.innerHeight }));
+      hudHandle.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      check("拖动仪表后不会误开设置面板", panel10.hidden === true);
+      hudHandle.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      check("单击仪表仍可打开设置面板", panel10.hidden === false);
+      layer10.querySelector(".eva-panel-close")?.click();
+      await new Promise((r) => setTimeout(r, 20));
+
+      fire("pointerdown", 0, 0, handle10);
+      fire("pointermove", 5000, 5000, window);
+      fire("pointerup", 5000, 5000, window);
+      await new Promise((r) => setTimeout(r, 30));
+      const clamped = clock10.getBoundingClientRect();
+      check("拖出界面时夹回可视区域",
+        clamped.right <= window.innerWidth - 3 && clamped.bottom <= window.innerHeight - 3,
+        JSON.stringify({ right: clamped.right, bottom: clamped.bottom, w: window.innerWidth, h: window.innerHeight }));
+      const draggedLeft = clamped.left, draggedTop = clamped.top;
+      for (const e of c10.state.effects) e.dispose();
+      const c11 = makeCtx();
+      exports.apply(c11);
+      await new Promise((r) => setTimeout(r, 80));
+      const layer11 = latest();
+      const clock11 = layer11.querySelector(".eva-clockpanel");
+      const restored = clock11.getBoundingClientRect();
+      check("重新挂载后恢复拖动位置",
+        Math.abs(restored.left - draggedLeft) < 3 && Math.abs(restored.top - draggedTop) < 3,
+        JSON.stringify({ restored: [restored.left, restored.top], dragged: [draggedLeft, draggedTop] }));
+      const resetBtn = layer11.querySelector(".eva-reset-layout");
+      check("设置面板提供重置位置按钮", Boolean(resetBtn));
+      resetBtn?.click();
+      await new Promise((r) => setTimeout(r, 30));
+      const reset = clock11.getBoundingClientRect();
+      check("重置位置回到默认锚点",
+        Math.abs(reset.left - before.left) < 3 && Math.abs(reset.top - before.top) < 3,
+        JSON.stringify({ reset: [reset.left, reset.top], before: [before.left, before.top] }));
+      check("重置后清除本地布局", (() => { try { return localStorage.getItem("dsh-eva-magi-theme:layout") === null; } catch { return false; } })());
+      for (const e of c11.state.effects) e.dispose();
     }
 
   } catch (error) {

@@ -151,16 +151,7 @@ for(const dark of [true,false]){
  settings.querySelector('.eva-panel-close').click();
 }
 document.body.setAttribute('data-ds-dark-theme','');await wait();
-for(const key of ['hudScale','clockScale']){
- const row=settings.querySelector('[data-key="'+key+'"]'),input=row.querySelector('input');
- check(key+'：尺寸步长统一为 0.05',input.step==='0.05');
- api.set(key,1.5);row.querySelectorAll('.eva-range-button')[1].click();
- check(key+'：加号每次放大 0.05 并显示倍率',Math.abs(api.options[key]-1.55)<1e-8&&row.querySelector('output').textContent==='1.55×');
- input.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));
- check(key+'：方向键按相同步长减小',api.options[key]===1.5);
- row.querySelectorAll('.eva-range-button')[0].click();row.querySelector('.eva-range-reset').click();
- check(key+'：单项默认只恢复该组件',api.options[key]===1.5);
-}
+check('尺寸滑杆已移除（四角缩放替代）',!settings.querySelector('[data-key="hudScale"],[data-key="clockScale"]'));
 await wait();
 check('恢复默认后时钟与仪表实际宽度一致',Math.abs(layer.querySelector('.eva-clockpanel').getBoundingClientRect().width-layer.querySelector('.eva-hud').getBoundingClientRect().width)<.1);
 
