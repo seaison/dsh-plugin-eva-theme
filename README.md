@@ -24,7 +24,7 @@
 | :---: | :---: |
 | 暗色模式 · 战斗服红、炭黑、橙金与绿色点缀 | 亮色模式 · 瓷白、冰蓝与少量红色标记 |
 
-<p align="center"><img src="docs/screenshots/character-asuka.png" width="49%" alt="明日香暗色主题：红黑界面、角色线稿与 02 装甲纹样" /> <img src="docs/screenshots/character-rei.png" width="49%" alt="绫波丽亮色主题：白蓝界面、角色线稿与 00 环形纹样" /></p>
+<p align="center"><img src="assets/preview-asuka.gif" width="49%" alt="明日香暗色主题：红黑界面、角色线稿与 02 装甲纹样" /> <img src="assets/preview-rei.gif" width="49%" alt="绫波丽亮色主题：白蓝界面、角色线稿与 00 环形纹样" /></p>
 
 点击图片可查看完整预览。截图来自包含模拟会话和音乐数据的测试台；实际布局随宿主版本、窗口尺寸和字体有所差异。
 
