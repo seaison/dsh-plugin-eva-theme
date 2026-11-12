@@ -9,10 +9,23 @@ export async function launchBrowser() {
  const chrome = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'].filter(Boolean).find(existsSync);
  if (!chrome) throw new Error('Chrome / Chromium is required (or set CHROME_PATH).');
  const profile = mkdtempSync(join(tmpdir(), 'eva-browser-'));
- const child = spawn(chrome, ['--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--hide-scrollbars', '--remote-debugging-pipe', '--user-data-dir=' + profile], {stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe']});
- let nextId = 0, buffer = ''; const pending = new Map();
- const fail = error => { for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(error); } pending.clear(); };
- child.on('error', fail); child.on('exit', () => fail(new Error('Chrome exited')));
+ const args = ['--headless=new', '--disable-gpu', '--disable-background-networking', '--no-first-run', '--hide-scrollbars', '--remote-debugging-pipe', '--user-data-dir=' + profile];
+ // The hosted Linux VM isolates these local fixture pages from the user's browser and files.
+ if (process.platform === 'linux' && process.env.RUNNER_ENVIRONMENT === 'github-hosted') args.push('--no-sandbox', '--disable-dev-shm-usage');
+ const child = spawn(chrome, args, {stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe']});
+ let nextId = 0, buffer = '', diagnostics = '', failure = null;
+ const pending = new Map();
+ const withDiagnostics = message => new Error(diagnostics.trim() ? `${message}\n${diagnostics.trim()}` : message);
+ const fail = error => {
+  failure ??= withDiagnostics(error.message);
+  for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(failure); }
+  pending.clear();
+ };
+ child.stderr.setEncoding('utf8');
+ child.stderr.on('data', chunk => { diagnostics = (diagnostics + chunk).slice(-4096); });
+ child.on('error', fail); child.on('exit', (code, signal) => fail(new Error(`Chrome exited (${signal || code})`)));
+ child.stdio[3].on('error', fail); child.stdio[4].on('error', fail);
+ child.stdio[4].setEncoding('utf8');
  child.stdio[4].on('data', chunk => {
   buffer += chunk; let end;
   while ((end = buffer.indexOf('\0')) >= 0) {
@@ -23,7 +36,8 @@ export async function launchBrowser() {
   }
  });
  const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
-  const id = ++nextId, timer = setTimeout(() => {pending.delete(id); reject(new Error(method + ' timed out'));}, 15000);
+  if (failure) { reject(failure); return; }
+  const id = ++nextId, timer = setTimeout(() => {pending.delete(id); reject(withDiagnostics(method + ' timed out'));}, 15000);
   pending.set(id, {resolve, reject, timer}); child.stdio[3].write(JSON.stringify({id, method, params, ...(sessionId ? {sessionId} : {})}) + '\0');
  });
  return {
