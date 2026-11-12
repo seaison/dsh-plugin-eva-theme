@@ -1,6 +1,7 @@
 /** 验证真实 apply() 注册的路由、并发合并、超时恢复和卸载取消，不联网或调用播放器。 */
 import assert from "node:assert/strict";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
+import { EventEmitter } from "node:events";
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { apply } from "../lib/index.js";
@@ -25,7 +26,7 @@ const request = async (route, method="GET", body) => {
 };
 const sleep=()=>new Promise(resolve=>setTimeout(resolve,0));
 const realFetch=globalThis.fetch, realTimeout=AbortSignal.timeout;
-const realExec=childProcess.execFile, realPlatform=Object.getOwnPropertyDescriptor(process,"platform");
+const realExec=childProcess.execFile, realSpawn=childProcess.spawn, realPlatform=Object.getOwnPropertyDescriptor(process,"platform");
 let checks=0;
 try {
 	const musicOnly=mount(["webServer"]);
@@ -71,6 +72,61 @@ try {
 	assert.deepEqual(osaCalls.slice(beforeFallback).map(args=>args[0]==="-e"?"native":args[3]),["playpause","read","native"]);checks+=3;
 	player.dispose();childProcess.execFile=realExec;syncBuiltinESMExports();Object.defineProperty(process,"platform",realPlatform);
 
+	Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
+	const readers = [], controls = [];
+	let controlCode = null;
+	childProcess.spawn = (program, args, options) => {
+		assert.match(program, /WindowsPowerShell\\v1\.0\\powershell\.exe$/i);
+		assert.deepEqual(args.slice(-2), ["-Mode", "read"]);
+		assert.equal(options.windowsHide, true);
+		const proc = Object.assign(new EventEmitter(), { stdout: new PassThrough(), killed: false });
+		proc.kill = () => { proc.killed = true; proc.emit("exit"); };
+		readers.push(proc);
+		return proc;
+	};
+	childProcess.execFile = (program, args, options, callback) => {
+		assert.match(program, /powershell\.exe$/i);
+		controls.push({ args, signal: options.signal });
+		queueMicrotask(() => callback(null, JSON.stringify(controlCode ? { ok: false, code: controlCode } : { ok: true })));
+		return {};
+	};
+	syncBuiltinESMExports();
+	const windows = mount(["webServer"]);
+	const winRead = windows.routes.get(NOWPLAYING_PATH), winControl = windows.routes.get(CONTROL_PATH);
+	assert.equal(readers.length, 0);
+	assert.deepEqual((await request(winRead)).body, { ok: true, supported: true, app: null, playing: false, sources: [] });
+	assert.equal(readers.length, 1); checks += 3;
+	const netEase = { aumid: "netease:cloudmusic.exe", source: "netease", status: "Paused", title: "网易云曲目" };
+	const aumid = "C:\\Program Files\\VLC\\vlc.exe";
+	const vlc = { aumid, source: "smtc", status: "Playing", title: "当前音乐", duration: 240, position: 18 };
+	const wire = Buffer.from(JSON.stringify({ ok: true, sources: [netEase, vlc, { ...vlc }, { ...vlc, aumid: "closed.exe", status: "Closed" }] }) + "\r\n");
+	const cut = wire.indexOf(Buffer.from("当")) + 1;
+	readers[0].stdout.write(wire.subarray(0, cut));
+	assert.equal((await request(winRead)).body.app, null);
+	readers[0].stdout.write(wire.subarray(cut));
+	const snapshot = (await request(winRead)).body;
+	assert.equal(snapshot.title, "当前音乐");
+	assert.equal(snapshot.duration, 240);
+	assert.deepEqual(snapshot.sources.map(source => source.app), ["网易云音乐", "VLC"]);
+	assert.equal(readers.length, 1); checks += 5;
+	for (const [id, status] of [["abc\n-def", 400], [undefined, 400], ["unrelated.exe", 409]]) {
+		assert.equal((await request(winControl, "POST", { action: "next", bundleId: id })).status, status); checks++;
+	}
+	assert.equal(controls.length, 0);
+	assert.equal((await request(winControl, "POST", { action: "next", app: "VLC", bundleId: aumid })).status, 200);
+	assert.deepEqual(controls[0].args.slice(-4), ["-Mode", "next", "-SourceId", Buffer.from(aumid).toString("base64")]);
+	controlCode = "SOURCE_CHANGED";
+	assert.equal((await request(winControl, "POST", { action: "playpause", bundleId: netEase.aumid })).status, 409);
+	windows.dispose();
+	assert.equal(readers[0].killed, true);
+	assert.equal(controls[0].signal.aborted, true);
+	const reloaded = mount(["webServer"]);
+	await request(reloaded.routes.get(NOWPLAYING_PATH));
+	assert.equal(readers.length, 2);
+	reloaded.dispose(); checks += 7;
+	childProcess.spawn = realSpawn; childProcess.execFile = realExec;
+	syncBuiltinESMExports(); Object.defineProperty(process, "platform", realPlatform);
+
 	const host=mount(["webServer","credentials"]), route=host.routes.get(BALANCE_PATH);
 	let timeoutController=new AbortController(),calls=0,lastSignal;
 	AbortSignal.timeout=()=>timeoutController.signal;
@@ -96,4 +152,4 @@ try {
 	const pending=request(fresh.routes.get(BALANCE_PATH));await sleep();fresh.dispose();
 	await pending;assert.equal(lastSignal.aborted,true);assert.equal(fresh.routes.size,0);checks+=2;
 	console.log(`✓ 宿主路由测试通过（${checks} 项：媒体快速控制 / 来源保护 / 旧缓存隔离 / 并发 / 超时 / 卸载）`);
-} finally { globalThis.fetch=realFetch;AbortSignal.timeout=realTimeout;childProcess.execFile=realExec;syncBuiltinESMExports();Object.defineProperty(process,"platform",realPlatform); }
+} finally { globalThis.fetch=realFetch;AbortSignal.timeout=realTimeout;childProcess.execFile=realExec;childProcess.spawn=realSpawn;syncBuiltinESMExports();Object.defineProperty(process,"platform",realPlatform); }

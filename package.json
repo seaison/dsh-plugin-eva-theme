@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-eva-theme",
-  "version": "0.51.2",
+  "version": "0.52.0",
   "description": "DSH / DeepSeek Harness EVA 主题插件：明日香暗色、绫波丽亮色，包含驾驶员选择、启动语音、时钟和音乐播放器",
   "keywords": [
     "dsh",
@@ -59,7 +59,7 @@
   },
   "scripts": {
     "docs": "node tools/build-docs.mjs",
-    "check": "node tools/build-assets.mjs --check && node tests/verify-gif-timing.mjs && node --check lib/client.js && node --check < lib/system-nowplaying.jxa && node --check lib/host-assets.mjs && node --check lib/index.js && node --check lib/host-balance.mjs && node --check lib/host-nowplaying.mjs && node tools/build-docs.mjs --check && node tests/verify-docs.mjs",
+    "check": "node tools/build-assets.mjs --check && node tests/verify-gif-timing.mjs && node --check lib/client.js && node --check < lib/system-nowplaying.jxa && node --check lib/host-assets.mjs && node --check lib/index.js && node --check lib/host-balance.mjs && node --check lib/host-nowplaying.mjs && node --check lib/host-nowplaying-win.mjs && node tools/build-docs.mjs --check && node tests/verify-docs.mjs",
     "test": "npm run test:manifest && npm run test:tokens && npm run test:contrast && npm run test:host && npm run test:assets && npm run test:client && npm run test:window-drag && npm run test:attention && npm run test:boot && npm run test:layout",
     "test:manifest": "node tests/verify-manifest.mjs",
     "test:tokens": "node tests/verify-tokens.mjs",

@@ -19,12 +19,23 @@ const exported=definition.factory(()=>{});
 try{
 for(const withRoot of [true,false]){
  localStorage.clear();sessionStorage.setItem('dsh-eva-magi-theme:booted','1');document.documentElement.dataset.platform=withRoot?'darwin':'linux';
- const host=realCreate.call(document,'div');host.id=withRoot?'root':'fallback-app';host.innerHTML='<div id="app"><header data-window-drag>Host header</header><main data-conversation-region="chat">Chat</main><div data-composer-card><div data-composer-input contenteditable="true">Message</div></div><aside id="pre-inert" inert>Preserved</aside></div>';
+ const host=realCreate.call(document,'div');host.id=withRoot?'root':'fallback-app';host.innerHTML='<div id="app"><header data-window-drag data-conversation-header>Host header</header><main data-conversation-region="chat">Chat</main><div data-composer-card><div data-composer-input contenteditable="true">Message</div></div><aside id="pre-inert" inert>Preserved</aside></div>';
  document.body.prepend(host);const app=host.querySelector('#app'),outside=realCreate.call(document,'button');outside.textContent='Host portal';document.body.appendChild(outside);
+ if(withRoot){const leading=realCreate.call(document,'div');leading.setAttribute('data-conversation-header-leading','');app.querySelector('header').prepend(leading);}
  const effects=[],ctx={effect(fn){const stop=fn();effects.push(stop);return stop},inject(){},theme:{overrideTokens(){return()=>{}},setTheme(id){document.body.toggleAttribute('data-ds-dark-theme',id==='dark')}}};
  exported.apply(ctx);const api=__EVA_MAGI_THEME__;api.set('boot',false);const layer=document.querySelector('.eva-magi-layer');
+ const toggle=app.querySelector('.eva-theme-switch'),composer=app.querySelector('[data-composer-input]');
+ check('主题开关挂到会话顶栏并与宿主状态同步',toggle?.parentElement.matches(withRoot?'[data-conversation-header-leading]':'header')&&toggle.getAttribute('aria-pressed')===String(document.body.hasAttribute('data-ds-dark-theme')));
+ const wasDark=document.body.hasAttribute('data-ds-dark-theme');
+ const startTransition=document.startViewTransition;
+ try{document.startViewTransition=undefined;toggle?.click();await wait();}
+ finally{if(startTransition)delete document.startViewTransition;}
+ check('无页面过渡 API 时也可一键切换并保留输入草稿',document.body.hasAttribute('data-ds-dark-theme')!==wasDark&&toggle?.getAttribute('aria-pressed')===String(!wasDark)&&composer.textContent==='Message'&&!document.documentElement.hasAttribute('data-eva-theme-reveal'));
  check((withRoot?'root':'无 root 回退')+'：装饰层位于预期容器',layer.parentElement===(withRoot?host:document.body));
  if(withRoot){
+  check('主题按钮可以点击且顶栏仍可拖动',region(toggle)==='no-drag'&&region(app.querySelector('header'))==='drag');
+  const replacement=toggle.parentElement.cloneNode(false);toggle.parentElement.replaceWith(replacement);await wait();await wait();
+  check('宿主重新渲染会话顶栏后恢复同一个开关',toggle.parentElement===replacement&&app.querySelectorAll('.eva-theme-switch').length===1);
   check('macOS 装饰层不再形成全屏 no-drag 矩形',region(layer)==='none'&&region(app.querySelector('header'))==='drag'&&getComputedStyle(layer).pointerEvents==='none');
   const r=layer.getBoundingClientRect();check('移动挂载点保持全屏布局',r.x===0&&r.y===0&&r.width===innerWidth&&r.height===innerHeight);
  }
@@ -54,9 +65,9 @@ for(const withRoot of [true,false]){
  document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await wait();
  check('退出恢复宿主与外部 portal，保留原有 inert',!!!app.closest('[inert]')&&!outside.inert&&host.querySelector('#pre-inert').inert&&!boot.isConnected);
  const modal=realCreate.call(document,'div');modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');document.body.appendChild(modal);
- check('移入 root 不影响宿主弹窗隐藏装饰层',getComputedStyle(layer).visibility==='hidden');modal.remove();
- check('弹窗关闭恢复装饰层',getComputedStyle(layer).visibility==='visible');
- for(const stop of effects.reverse())stop();check('卸载移除 root 内装饰和启动层',!document.querySelector('.eva-magi-layer,.eva-boot'));
+ check('宿主弹窗隐藏装饰层和主题开关',getComputedStyle(layer).visibility==='hidden'&&getComputedStyle(toggle).visibility==='hidden');modal.remove();
+ check('弹窗关闭恢复装饰层和主题开关',getComputedStyle(layer).visibility==='visible'&&getComputedStyle(toggle).visibility==='visible');
+ for(const stop of effects.reverse())stop();check('卸载移除装饰、启动层和主题开关',!document.querySelector('.eva-magi-layer,.eva-boot,.eva-theme-switch'));
  host.remove();outside.remove();
 }
 }catch(e){check('窗口拖动回归无异常',false,String(e.stack||e))}

@@ -55,8 +55,12 @@ window.fetch=async(url,init={})=>{
   const body=JSON.parse(init.body);actions.push(body);
   const gate=commandGate;commandGate=null;if(gate)await gate.promise;
   if(commandFailure){const code=commandFailure;commandFailure=null;return {ok:false,status:409,json:async()=>({ok:false,code})}};
-  if(body.action==='playpause'){external={...external,playing:!external.playing,state:external.playing?'paused':'playing'}}
-  else external={...external,title:body.action==='next'?'Next track':'Previous track'};
+  const update=source=>body.action==='playpause'?{...source,playing:!source.playing,state:source.playing?'paused':'playing'}:{...source,title:body.action==='next'?'Next track':'Previous track'};
+  if(Array.isArray(external.sources)){
+   const sources=external.sources.map(source=>source.bundleId===body.bundleId?update(source):source);
+   const primary=sources.find(source=>source.playing)||sources[0];
+   external={ok:true,supported:true,...primary,sources};
+  }else external=update(external);
   return {ok:true,status:200,json:async()=>({ok:true})};
  }
  mediaReads++;lastMediaUrl=String(url);mediaSignal=init.signal;const snapshot=readSnapshot||{...external},gate=readGate;readSnapshot=null;readGate=null;if(gate)await gate.promise;
@@ -313,6 +317,22 @@ await new Promise(r=>setTimeout(r,300));
 check('校准重试绕过旧缓存，系统状态追上后正常完成',mediaReads>beforeReconcile&&lastMediaUrl.includes('?refresh=1')&&!mp.hasAttribute('data-playing')&&!mp.hasAttribute('data-command'));
 external={ok:true,supported:true,app:null};await refresh();
 check('来源结束后隐藏播放器并清理载入动画',!visible(mp)&&!mp.hasAttribute('data-playing')&&!mp.hasAttribute('data-entering'));
+if(innerWidth===1280&&devicePixelRatio===1){
+ const windowsPrimary={app:'VLC',bundleId:'vlc.exe',source:'smtc',playing:true,state:'playing',title:'VLC 曲目',duration:180,position:7};
+ const windowsAlternate={app:'网易云音乐',bundleId:'netease:cloudmusic.exe',source:'netease',playing:false,state:'paused',title:'网易云曲目',duration:0,position:0};
+ external={ok:true,supported:true,...windowsPrimary,sources:[windowsPrimary,windowsAlternate]};await refresh();
+ const picker=mp.querySelector('.eva-mp-source-picker');
+ check('Windows 多音源显示选择器并优先呈现正在播放的来源',visible(picker)&&picker.length===2&&picker.value===windowsPrimary.bundleId);
+ picker.value=windowsAlternate.bundleId;picker.dispatchEvent(new Event('change'));await wait();
+ check('可固定暂停的音源，未知时长显示破折号',visible(mp)&&!mp.hasAttribute('data-playing')&&mp.querySelector('.eva-mp-title').textContent==='网易云曲目'&&mp.querySelector('.eva-mp-tot').textContent==='—');
+ readSnapshot=external;mp.querySelector('[data-act=play]').click();await wait();
+ check('Windows 旧快照不使面板闪回，动作仍交给指定音源',visible(mp)&&mp.dataset.playing==='1'&&!mp.hasAttribute('data-entering')&&actions.at(-1)?.bundleId===windowsAlternate.bundleId);
+ await new Promise(r=>setTimeout(r,300));
+ check('Windows 实际状态到达后保持手动选中的音源',picker.value===windowsAlternate.bundleId&&mp.dataset.playing==='1');
+ external={ok:true,supported:true,...windowsPrimary,sources:[windowsPrimary]};await refresh();
+ check('选中音源退出后回到仍在播放的来源',picker.hidden&&mp.querySelector('.eva-mp-title').textContent==='VLC 曲目');
+ external={ok:true,supported:true,app:null};await refresh();
+}
 // 页面隐藏时不采样、不轮询，恢复时立刻刷新。
 Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));
 check('隐藏页面暂停装饰动画',layer.hasAttribute('data-paused'));

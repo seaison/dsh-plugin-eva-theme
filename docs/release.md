@@ -13,7 +13,7 @@ npm run release
 也可单独检查已有安装包：
 
 ```sh
-node tests/verify-package.mjs dist/dsh-plugin-eva-theme-0.51.2.tgz
+node tests/verify-package.mjs dist/dsh-plugin-eva-theme-0.52.0.tgz
 ```
 
 ## 上传仓库与 Release
