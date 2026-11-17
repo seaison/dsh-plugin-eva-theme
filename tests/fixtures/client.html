@@ -47,7 +47,7 @@ window.__ModuleLoader__ = {
     check("exports.apply 是函数", typeof exports.apply === "function");
     check("exports.inject 只依赖 theme 服务", JSON.stringify(exports.inject) === '["theme"]', JSON.stringify(exports.inject));
     check("PALETTE 导出 107 个令牌", Object.keys(exports.PALETTE).length === 107, String(Object.keys(exports.PALETTE).length));
-    check("DEFAULT_OPTIONS 导出 16 个选项", Object.keys(exports.DEFAULT_OPTIONS).length === 16, Object.keys(exports.DEFAULT_OPTIONS).join(","));
+    check("DEFAULT_OPTIONS 导出 17 个选项", Object.keys(exports.DEFAULT_OPTIONS).length === 17, Object.keys(exports.DEFAULT_OPTIONS).join(","));
 
     // ---- 假的 Cordis 上下文：记录 effect 与令牌层调用，能真正回收 ----
     const makeCtx = (remote) => {
@@ -141,6 +141,35 @@ window.__ModuleLoader__ = {
     const fit = layer.querySelector(".eva-corner-stack")?.dataset.fit ?? "";
     check("仪表簇有自动避让档位（无输入框时默认 full）", fit === "full", fit);
 
+    // —— 收起 / 展開 ——
+    const stackNode = layer.querySelector(".eva-corner-stack");
+    const toggleNode = stackNode.querySelector(".eva-stack-toggle");
+    const collapsedNode = stackNode.querySelector(".eva-collapsed");
+    check("收起与展開按钮都在簇里", Boolean(toggleNode) && Boolean(collapsedNode));
+    check("默认展开：收起按钮可见、展開块隐藏",
+      stackNode.dataset.collapsed === "0" && getComputedStyle(collapsedNode).display === "none");
+    toggleNode.click();
+    check("点收起后整簇只剩展開按钮",
+      stackNode.dataset.collapsed === "1"
+      && getComputedStyle(stackNode.querySelector(".eva-tags")).display === "none"
+      && getComputedStyle(stackNode.querySelector(".eva-hud")).display === "none"
+      && getComputedStyle(stackNode.querySelector(".eva-stack-head")).display === "none"
+      && getComputedStyle(collapsedNode).display !== "none");
+    check("收起状态写进选项并持久化",
+      globalThis.__EVA_MAGI_THEME__.options.hudCollapsed === true
+      && JSON.parse(localStorage.getItem(STORAGE_NAMESPACE + ":options") || "{}").hudCollapsed === true);
+    check("收起后焦点落在展開按钮上", document.activeElement === collapsedNode);
+    check("收起后仪表簇收缩到一枚按钮（含 1.5 倍仪表缩放）",
+      stackNode.getBoundingClientRect().width < 110 && stackNode.getBoundingClientRect().height < 60,
+      JSON.stringify([Math.round(stackNode.getBoundingClientRect().width), Math.round(stackNode.getBoundingClientRect().height)]));
+    collapsedNode.click();
+    check("点展開后组件回来",
+      stackNode.dataset.collapsed === "0"
+      && getComputedStyle(stackNode.querySelector(".eva-tags")).display !== "none"
+      && getComputedStyle(collapsedNode).display === "none"
+      && globalThis.__EVA_MAGI_THEME__.options.hudCollapsed === false);
+    check("展開后焦点回到收起按钮", document.activeElement === toggleNode);
+
     // —— 开机序列 ——
     const boot = document.body.querySelector(".eva-boot");
     check("开机画面在素材同色纯背景播放 GIF，并提供独立静音按钮", Boolean(boot) && [...boot.children].every(node=>node.matches('img.eva-boot-gif,button.eva-boot-sound')) && boot.firstElementChild.matches("img.eva-boot-gif") && getComputedStyle(boot).backgroundColor === "rgb(0, 1, 1)");
@@ -149,7 +178,9 @@ window.__ModuleLoader__ = {
     const bootSource = bootImage?.getAttribute('src');
     await new Promise(resolve => { if (bootImage?.complete) resolve(); else { bootImage?.addEventListener('load', resolve, {once:true}); setTimeout(resolve, 1000); } });
     check("用户提供的 GIF 原始素材已实际解码", bootImage?.naturalWidth === 256 && bootImage?.naturalHeight === 256 && bootSource.includes('/dsh-eva-magi/assets/animations/'));
-    check("NERV SVG 已用于时钟和播放器，且不进入辅助技术阅读流", layer.querySelectorAll('.eva-nerv-logo').length === 2 && getComputedStyle(layer.querySelector('.eva-nerv-logo')).maskImage.includes('/dsh-eva-magi/assets/svg/'));
+    check("NERV SVG 用于时钟、播放器和展開按钮", layer.querySelectorAll('.eva-nerv-logo').length === 3 && getComputedStyle(layer.querySelector('.eva-nerv-logo')).maskImage.includes('/dsh-eva-magi/assets/svg/'));
+    check("展開按钮的 NERV 标记不进辅助技术阅读流",
+      layer.querySelector('.eva-collapsed .eva-nerv-logo')?.getAttribute('aria-hidden') === 'true');
     check("开机序列会话标记已写入", (() => { try { return sessionStorage.getItem(STORAGE_NAMESPACE + ":booted") === "1"; } catch { return false; } })());
     globalThis.__EVA_MAGI_THEME__.set('boot',false);
 
